@@ -28,9 +28,17 @@ class AIService:
     - Transparently labels fallback as 'Offline Demo Mode (Sample Data)' when Groq key is absent or fails.
     """
 
+    FALLBACK_MODELS = [
+        "openai/gpt-oss-120b",
+        "openai/gpt-oss-20b",
+        "qwen/qwen3.8-27b",
+        "llama-3.3-70b-versatile",
+        "llama-3.1-8b-instant",
+    ]
+
     def __init__(self):
         self.groq_client = None
-        self.model = settings.GROQ_MODEL or "llama-3.3-70b-versatile"
+        self.model = settings.GROQ_MODEL or "openai/gpt-oss-120b"
         self._init_groq()
 
     def _init_groq(self):
@@ -38,24 +46,54 @@ class AIService:
             try:
                 from groq import Groq
                 self.groq_client = Groq(api_key=settings.GROQ_API_KEY)
-                logger.info(f"[AI] Groq client initialized successfully with model {self.model}.")
+                logger.info(f"[AI] Groq client initialized successfully with preferred model {self.model}.")
             except Exception as e:
                 logger.error(f"[AI] Groq client initialization error: {e}")
                 self.groq_client = None
         else:
             logger.info("[AI] GROQ_API_KEY not configured. Running in explicit Demo Mode.")
 
+    def _call_groq_with_fallback(self, system_prompt: str, user_prompt: str, max_tokens: int = 6000):
+        if not self.groq_client:
+            raise RuntimeError("Groq client not initialized")
+
+        # Prioritize preferred model first, then the remaining fallbacks
+        candidate_models = [self.model] + [m for m in self.FALLBACK_MODELS if m != self.model]
+        last_error = None
+
+        for model_name in candidate_models:
+            try:
+                logger.info(f"[AI:Groq] Attempting generation with model: {model_name}")
+                completion = self.groq_client.chat.completions.create(
+                    model=model_name,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    response_format={"type": "json_object"},
+                    temperature=0.7,
+                    max_tokens=max_tokens,
+                )
+                logger.info(f"[AI:Groq] Successfully generated with model: {model_name}")
+                return completion, model_name
+            except Exception as err:
+                logger.warning(f"[AI:Groq] Model {model_name} failed: {err}. Trying next candidate...")
+                last_error = err
+
+        raise RuntimeError(f"All Groq candidate models failed. Last error: {last_error}")
+
     def get_provider_status(self) -> Dict[str, Any]:
         return {
             "sole_provider": "Groq",
             "model": self.model,
+            "fallback_models": self.FALLBACK_MODELS,
             "configured": bool(settings.GROQ_API_KEY),
             "is_live_ready": self.groq_client is not None,
         }
 
     def generate_itinerary(self, req: TripRequest) -> ItineraryResponse:
         """
-        Generate complete structured itinerary using Groq.
+        Generate complete structured itinerary using Groq with multi-model fallback.
         Falls back explicitly to labelled Demo Mode if Groq key is missing or calls fail.
         """
         if self.groq_client:
@@ -165,15 +203,10 @@ Required JSON Schema:
 Ensure days array has exactly {req.duration_days} day objects.
 """
 
-        completion = self.groq_client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            response_format={"type": "json_object"},
-            temperature=0.7,
-            max_tokens=6000,
+        completion, used_model = self._call_groq_with_fallback(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            max_tokens=6000
         )
 
         raw_content = completion.choices[0].message.content or "{}"
@@ -187,7 +220,7 @@ Ensure days array has exactly {req.duration_days} day objects.
         data["traveler_count"] = req.traveler_count
         data["created_at"] = datetime.now(timezone.utc).isoformat()
         data["is_generated_by_ai"] = True
-        data["provider_used"] = f"Groq ({self.model})"
+        data["provider_used"] = f"Groq ({used_model})"
         data["is_demo_mode"] = False
         data["unverified_data_disclaimer"] = (
             "Generated via Groq LLM. All activities, coordinates, and prices are estimates and must be verified before travel."
@@ -268,20 +301,16 @@ Format strictly matching:
     ]
 }}
 """
-                completion = self.groq_client.chat.completions.create(
-                    model=self.model,
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                    response_format={"type": "json_object"},
-                    temperature=0.7,
+                completion, used_model = self._call_groq_with_fallback(
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                    max_tokens=4000
                 )
                 data = json.loads(completion.choices[0].message.content or "{}")
                 data["day_number"] = day_number
                 data["date"] = trip.days[target_day_idx].date
                 trip.days[target_day_idx] = DayPlan.model_validate(data)
-                logger.info(f"[AI:Groq] Regenerated day {day_number} with Groq.")
+                logger.info(f"[AI:Groq] Regenerated day {day_number} with Groq ({used_model}).")
                 return trip
             except Exception as e:
                 logger.error(f"[AI:Groq] Day regeneration error: {e}. Using deterministic day refresh.")

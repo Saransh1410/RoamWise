@@ -13,10 +13,11 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# CORS Middleware setup - Strict explicit origins, no wildcard '*'
+# CORS Middleware setup - Strict explicit origins + any preview/prod Vercel deployment
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
+    allow_origin_regex=r"^https:\/\/.*\.vercel\.app$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -29,6 +30,7 @@ app.include_router(pdf.router, prefix=settings.API_V1_STR)
 
 
 @app.get("/health", tags=["System"])
+@app.get("/api/health", tags=["System"])
 async def health_check():
     ai_status = ai_service.get_provider_status()
     db_status = db_service.get_status()
@@ -55,6 +57,11 @@ async def health_check():
 @app.get("/", tags=["System"])
 async def root():
     return {
-        "message": f"Welcome to {settings.PROJECT_NAME} API. Explore docs at /docs",
-        "api_v1": settings.API_V1_STR
+        "status": "online",
+        "message": "API is Live",
+        "health_check": "/api/health",
+        "documentation": "/docs",
+        "app": settings.PROJECT_NAME,
+        "api_v1": settings.API_V1_STR,
     }
+
