@@ -61,50 +61,53 @@ class DatabaseService:
         return conn
 
     def _init_sqlite(self):
-        conn = self._get_sqlite_conn()
-        cursor = conn.cursor()
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS trips (
-                id TEXT PRIMARY KEY,
-                user_id TEXT,
-                title TEXT NOT NULL,
-                destination TEXT NOT NULL,
-                country TEXT DEFAULT '',
-                start_date TEXT,
-                end_date TEXT,
-                duration_days INTEGER NOT NULL,
-                traveler_count INTEGER DEFAULT 2,
-                estimated_total_cost REAL DEFAULT 0.0,
-                currency TEXT DEFAULT 'USD',
-                itinerary_data TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            )
-        """)
-        
-        # Check and migrate columns dynamically for existing databases
-        cursor.execute("PRAGMA table_info(trips)")
-        existing_cols = {row["name"] for row in cursor.fetchall()}
-        
-        needed_cols = [
-            ("user_id", "TEXT"),
-            ("start_date", "TEXT"),
-            ("end_date", "TEXT"),
-            ("traveler_count", "INTEGER DEFAULT 2"),
-        ]
-        for col_name, col_type in needed_cols:
-            if col_name not in existing_cols:
-                try:
-                    cursor.execute(f"ALTER TABLE trips ADD COLUMN {col_name} {col_type}")
-                    logger.info(f"[DB:SQLite] Migrated column: {col_name}")
-                except Exception as ex:
-                    logger.warning(f"[DB:SQLite] Column check note for {col_name}: {ex}")
+        try:
+            conn = self._get_sqlite_conn()
+            cursor = conn.cursor()
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS trips (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT,
+                    title TEXT NOT NULL,
+                    destination TEXT NOT NULL,
+                    country TEXT DEFAULT '',
+                    start_date TEXT,
+                    end_date TEXT,
+                    duration_days INTEGER NOT NULL,
+                    traveler_count INTEGER DEFAULT 2,
+                    estimated_total_cost REAL DEFAULT 0.0,
+                    currency TEXT DEFAULT 'USD',
+                    itinerary_data TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+            """)
+            
+            # Check and migrate columns dynamically for existing databases
+            cursor.execute("PRAGMA table_info(trips)")
+            existing_cols = {row["name"] for row in cursor.fetchall()}
+            
+            needed_cols = [
+                ("user_id", "TEXT"),
+                ("start_date", "TEXT"),
+                ("end_date", "TEXT"),
+                ("traveler_count", "INTEGER DEFAULT 2"),
+            ]
+            for col_name, col_type in needed_cols:
+                if col_name not in existing_cols:
+                    try:
+                        cursor.execute(f"ALTER TABLE trips ADD COLUMN {col_name} {col_type}")
+                        logger.info(f"[DB:SQLite] Migrated column: {col_name}")
+                    except Exception as ex:
+                        logger.warning(f"[DB:SQLite] Column check note for {col_name}: {ex}")
 
-        # Indexes for SQLite
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_sqlite_destination ON trips(destination)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_sqlite_updated_at ON trips(updated_at DESC)")
-        conn.commit()
-        conn.close()
+            # Indexes for SQLite
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_sqlite_destination ON trips(destination)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_sqlite_updated_at ON trips(updated_at DESC)")
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logger.warning(f"[DB:SQLite] SQLite initialization note: {e}")
 
     def _validate_uuid(self, trip_id: str) -> str:
         try:

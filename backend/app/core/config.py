@@ -1,3 +1,4 @@
+import os
 from typing import List
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -13,7 +14,7 @@ class Settings(BaseSettings):
     # Supabase / DB Configuration
     SUPABASE_URL: str = ""
     SUPABASE_KEY: str = ""
-    DATABASE_PATH: str = "roamwise_local.db"
+    DATABASE_PATH: str = "/tmp/roamwise_local.db" if os.environ.get("VERCEL") else "roamwise_local.db"
     
     # Security: Explicit CORS Origins (No wildcard '*' allowed)
     CORS_ORIGINS: List[str] = [
@@ -29,7 +30,7 @@ class Settings(BaseSettings):
     APP_ENV: str = "development"
     
     model_config = SettingsConfigDict(
-        env_file="backend/.env",
+        env_file=(".env", "backend/.env"),
         env_file_encoding="utf-8",
         extra="ignore"
     )
