@@ -179,13 +179,28 @@ export const TripWizard: React.FC<TripWizardProps> = ({
     }
     setErrorMessage('');
     setStep((prev) => Math.min(prev + 1, 3));
-    window.scrollTo({ top: 200, behavior: 'smooth' });
+    
+    // Only scroll if the wizard top is scrolled off-screen above the viewport
+    const wizardEl = document.getElementById('planner-wizard');
+    if (wizardEl) {
+      const rect = wizardEl.getBoundingClientRect();
+      if (rect.top < 0) {
+        wizardEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
   };
 
   const handleBack = () => {
     setErrorMessage('');
     setStep((prev) => Math.max(prev - 1, 1));
-    window.scrollTo({ top: 200, behavior: 'smooth' });
+    
+    const wizardEl = document.getElementById('planner-wizard');
+    if (wizardEl) {
+      const rect = wizardEl.getBoundingClientRect();
+      if (rect.top < 0) {
+        wizardEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
   };
 
   const handleGenerate = async () => {
