@@ -1,7 +1,5 @@
 import sys
 import os
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
 
 # Dynamically add all potential module search paths for Vercel Serverless
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -12,21 +10,30 @@ for path in [current_dir, parent_dir, os.path.join(parent_dir, "backend")]:
         sys.path.insert(0, path)
 
 try:
-    from app.main import app
+    from app.main import app as fastapi_app
 except ImportError:
-    from backend.app.main import app
+    from backend.app.main import app as fastapi_app
 
-class VercelPathMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        # Vercel sends the client's actual requested path in x-matched-path
-        matched = request.headers.get("x-matched-path") or request.headers.get("x-vercel-matched-path")
-        if matched and not matched.startswith("/api/index"):
-            request.scope["path"] = matched
-        elif request.scope.get("path", "").startswith("/api/index.py"):
-            stripped = request.scope["path"].replace("/api/index.py", "", 1)
-            request.scope["path"] = stripped if stripped else "/"
-        return await call_next(request)
+class ASGIVercelPathMiddleware:
+    """
+    Raw ASGI middleware that runs before Starlette routing to normalize
+    the rewritten /api/index.py path back to the client's actual route.
+    """
+    def __init__(self, app):
+        self.app = app
 
-app.add_middleware(VercelPathMiddleware)
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") == "http":
+            headers = dict(scope.get("headers", []))
+            matched = headers.get(b"x-matched-path", b"").decode("utf-8")
+            if matched and not matched.startswith("/api/index"):
+                scope["path"] = matched
+            elif scope.get("path", "").startswith("/api/index.py"):
+                stripped = scope["path"].replace("/api/index.py", "", 1)
+                scope["path"] = stripped if stripped else "/"
+        await self.app(scope, receive, send)
+
+# Export wrapped ASGI application for Vercel Serverless runtime
+app = ASGIVercelPathMiddleware(fastapi_app)
 
 __all__ = ["app"]
