@@ -68,15 +68,13 @@ async def root():
 
 @app.api_route("/{rest_of_path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
 async def catch_all_route(request: Request, rest_of_path: str):
-    # If client requested health check on subpath
-    if "health" in rest_of_path:
-        return await health_check()
     return {
         "status": "online",
         "app": settings.PROJECT_NAME,
         "message": "Roamwise AI API Gateway",
         "matched_path": rest_of_path,
         "scope_path": request.scope.get("path"),
+        "headers": dict(request.headers),
         "api_v1": settings.API_V1_STR,
     }
 
