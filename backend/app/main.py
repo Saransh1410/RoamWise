@@ -23,14 +23,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include Routers
+# Include Routers (Standard routes + Vercel Serverless Function compatibility)
 app.include_router(itinerary.router, prefix=settings.API_V1_STR)
 app.include_router(trips.router, prefix=settings.API_V1_STR)
 app.include_router(pdf.router, prefix=settings.API_V1_STR)
 
+for v_prefix in ["/api/index.py", "/api/index"]:
+    app.include_router(itinerary.router, prefix=f"{v_prefix}{settings.API_V1_STR}")
+    app.include_router(trips.router, prefix=f"{v_prefix}{settings.API_V1_STR}")
+    app.include_router(pdf.router, prefix=f"{v_prefix}{settings.API_V1_STR}")
+
 
 @app.get("/health", tags=["System"])
 @app.get("/api/health", tags=["System"])
+@app.get("/api/v1/health", tags=["System"])
+@app.get("/api/index.py/health", tags=["System"])
+@app.get("/api/index.py/api/health", tags=["System"])
+@app.get("/api/index.py/api/v1/health", tags=["System"])
 async def health_check():
     ai_status = ai_service.get_provider_status()
     db_status = db_service.get_status()
@@ -55,6 +64,8 @@ async def health_check():
 
 
 @app.get("/", tags=["System"])
+@app.get("/api/index.py", tags=["System"])
+@app.get("/api/index.py/", tags=["System"])
 async def root():
     return {
         "status": "online",
@@ -62,19 +73,6 @@ async def root():
         "health_check": "/api/health",
         "documentation": "/docs",
         "app": settings.PROJECT_NAME,
-        "api_v1": settings.API_V1_STR,
-    }
-
-
-@app.api_route("/{rest_of_path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
-async def catch_all_route(request: Request, rest_of_path: str):
-    return {
-        "status": "online",
-        "app": settings.PROJECT_NAME,
-        "message": "Roamwise AI API Gateway",
-        "matched_path": rest_of_path,
-        "scope_path": request.scope.get("path"),
-        "headers": dict(request.headers),
         "api_v1": settings.API_V1_STR,
     }
 
