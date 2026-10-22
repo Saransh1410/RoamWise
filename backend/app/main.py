@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.routers import itinerary, trips, pdf
@@ -64,4 +64,20 @@ async def root():
         "app": settings.PROJECT_NAME,
         "api_v1": settings.API_V1_STR,
     }
+
+
+@app.api_route("/{rest_of_path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+async def catch_all_route(request: Request, rest_of_path: str):
+    # If client requested health check on subpath
+    if "health" in rest_of_path:
+        return await health_check()
+    return {
+        "status": "online",
+        "app": settings.PROJECT_NAME,
+        "message": "Roamwise AI API Gateway",
+        "matched_path": rest_of_path,
+        "scope_path": request.scope.get("path"),
+        "api_v1": settings.API_V1_STR,
+    }
+
 
